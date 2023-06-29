@@ -1,0 +1,108 @@
+version: "3.8"
+
+services:
+  django:
+    build: .
+    container_name: django
+    command: >
+      sh -c "sleep 10 &&
+             python manage.py migrate app &&
+             python manage.py migrate shared_data_app --database=products_shared_db &&
+             python manage.py runserver 0.0.0.0:8000 --noreload"
+    volumes:
+      - .:/user/src/app
+    ports:
+      - "8000:8000"
+    environment:
+      # The secrets here would be in a secret store, for now just adding it here
+      - DEBUG=1
+      - DJANGO_ALLOWED_HOSTS=localhost 127.0.0.1 0.0.0.0
+      - PYTHONUNBUFFERED=1
+      - ENV=dev
+      - PRODUCT_ALERT_MANAGER_SECRET_KEY='django-insecure-l6mhdpf^ae=9unx\$$)0(ijr_&7^#ze\$$kwn*6v6pqznt-sa=64*f'
+      - DB_HOST=mysql_db
+      - DB_PORT=3306
+      - DB_PASSWORD=
+      - DB_USER=root
+      - SHARED_DB_HOST=mysql_db
+      - SHARED_DB_PORT=3306
+      - SHARED_DB_PASSWORD=
+      - SHARED_DB_USER=root
+      - EBAY_BASIC_AUTH_PASSWORD=SBX-bd2b6431db6c-c3a3-4ba4-8250-2719
+      - EBAY_BASIC_AUTH_USERNAME=waleedab-key-SBX-fbd2b6431-3b795dc4
+      - EBAY_ENDPOINT_BASE_URL=https://api.sandbox.ebay.com
+      - CELERY_USER_PRODUCT_EMAIL_WORKER_BATCH_SIZE=1000
+      - CELERY_BEAT_TASK_ENQUEUE_PERIOD_SECONDS=120
+      - REDIS_BROKER_URL=redis://redis:6379/0
+      - REDIS_CACHE_URL=redis://redis:6379/1
+      - REDIS_QUEUE_URL=redis://redis:6379/2
+      - REDIS_USER_SETTINGS_QUEUE=user_settings
+      # Using a gmail account application password, will revoke access after receiving email from your side
+      - PRODUCT_UPDATES_SENDER_EMAIL=waleedabbasi996@gmail.com
+      - PRODUCT_UPDATES_SENDER_EMAIL_PASSWORD=sgpvcpvfctxkgvmi
+    depends_on:
+      - mysql_db
+
+  celery:
+    build: .
+    command: celery -A config worker --concurrency=2 -l INFO
+    volumes:
+      - .:/usr/src/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ENV=dev
+      - REDIS_BROKER_URL=redis://redis:6379/0
+      - REDIS_CACHE_URL=redis://redis:6379/1
+      - DB_HOST=mysql_db
+      - DB_PORT=3306
+      - DB_PASSWORD=
+      - DB_USER=root
+      - SHARED_DB_HOST=mysql_db
+      - SHARED_DB_PORT=3306
+      - SHARED_DB_PASSWORD=
+      - SHARED_DB_USER=root
+      - CELERY_USER_PRODUCT_EMAIL_WORKER_BATCH_SIZE=1000
+      - CELERY_BEAT_TASK_ENQUEUE_PERIOD_SECONDS=120
+      - EBAY_BASIC_AUTH_PASSWORD=SBX-bd2b6431db6c-c3a3-4ba4-8250-2719
+      - EBAY_BASIC_AUTH_USERNAME=waleedab-key-SBX-fbd2b6431-3b795dc4
+      - EBAY_ENDPOINT_BASE_URL=https://api.sandbox.ebay.com
+      - PRODUCT_UPDATES_SENDER_EMAIL=waleedabbasi996@gmail.com
+      - PRODUCT_UPDATES_SENDER_EMAIL_PASSWORD=sgpvcpvfctxkgvmi
+    depends_on:
+      - django
+      - redis
+
+  celery-beat:
+    build: .
+    command: celery -A config beat --loglevel=info
+    volumes:
+      - .:/usr/src/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ENV=dev
+      - REDIS_BROKER_URL=redis://redis:6379/0
+      - CELERY_BEAT_TASK_ENQUEUE_PERIOD_SECONDS=120
+    depends_on:
+      - django
+      - redis
+
+  redis:
+    image: redis:latest
+    ports:
+      - "62379:6379"
+
+  mysql_db:
+    image: mysql:latest
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes
+      - MYSQL_DATABASE=product_alerts_manager
+      - MYSQL_DATABASE=products_information_shared
+    volumes:
+      - ./mysql-data:/var/lib/mysql-container
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  mysql-data:

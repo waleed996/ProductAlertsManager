@@ -1,0 +1,6 @@
+
+
+class EbayUnauthorizedException(Exception):
+    pass
+
+
